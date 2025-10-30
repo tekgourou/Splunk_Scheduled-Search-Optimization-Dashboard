@@ -56,7 +56,7 @@ This dashboard provides deep visibility into your Splunk scheduled searches, hel
 
 1. **Download the Dashboard XML**
    ```bash
-   wget https://github.com/yourusername/splunk-scheduled-search-optimizer/raw/main/scheduled_search_optimization_dashboard.xml
+   wget https://raw.githubusercontent.com/tekgourou/Splunk_Scheduled-Search-Optimization-Dashboard/refs/heads/main/scheduled_search_optimization_dashboard_fixed.xml
    ```
 
 2. **Import to Splunk**
