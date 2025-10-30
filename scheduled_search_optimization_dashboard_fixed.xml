@@ -1,0 +1,339 @@
+<form version="1.1">
+  <label>Scheduled Search Optimization Dashboard v2.2</label>
+  <description>Comprehensive analysis of scheduled searches, reports, and alerts - Data Only</description>
+  <!-- Row 1: Executive Summary -->
+  <!-- Row 2: Summary Statistics by Type -->
+  <!-- Row 3: Distribution Charts -->
+  <!-- Row 4: Scheduling Conflicts -->
+  <!-- Row 5: Detailed Optimization Analysis -->
+  <!-- Row 6: Real-Time Searches -->
+  <!-- Row 7: Apps Distribution -->
+  <fieldset submitButton="true" autoRun="true">
+    <input type="time" token="time_token">
+      <label>Time Range</label>
+      <default>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="app_filter">
+      <label>Filter by App</label>
+      <choice value="*">All Apps</choice>
+      <default>*</default>
+      <fieldForLabel>app</fieldForLabel>
+      <fieldForValue>app</fieldForValue>
+      <search>
+        <query>| rest /servicesNS/-/-/saved/searches | search disabled=0 is_scheduled=1 | stats count by eai:acl.app | rename "eai:acl.app" as app | sort - count</query>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </search>
+    </input>
+    <input type="dropdown" token="priority_filter">
+      <label>Priority Filter</label>
+      <choice value="*">All Priorities</choice>
+      <choice value="1">Critical Only</choice>
+      <choice value="1 OR optimization_priority=2">Critical + High</choice>
+      <default>*</default>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <title>Total Scheduled Searches</title>
+      <single>
+        <search>
+          <query>| rest /servicesNS/-/-/saved/searches 
+| search disabled=0 is_scheduled=1 eai:acl.app=$app_filter$
+| stats count</query>
+          <earliest>$time_token.earliest$</earliest>
+          <latest>$time_token.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x65A637","0x6DB7C6","0xF7BC38","0xF58F39","0xD93F3C"]</option>
+        <option name="rangeValues">[0,50,100,200]</option>
+        <option name="underLabel">Active Scheduled Items</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Real-Time Searches (CRITICAL)</title>
+      <single>
+        <search>
+          <query>| rest /servicesNS/-/-/saved/searches 
+| search disabled=0 realtime_schedule=1 eai:acl.app=$app_filter$
+| stats count</query>
+          <earliest>$time_token.earliest$</earliest>
+          <latest>$time_token.latest$</latest>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x65A637","0xF7BC38","0xF58F39","0xD93F3C"]</option>
+        <option name="rangeValues">[0,500,850]</option>
+        <option name="underLabel">Convert to Scheduled</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Searches with JOIN</title>
+      <single>
+        <search>
+          <query>| rest /servicesNS/-/-/saved/searches 
+| search disabled=0 is_scheduled=1 eai:acl.app=$app_filter$
+| eval has_join=if(match(search, "(?i)\\|\\s*join"), 1, 0)
+| stats sum(has_join)</query>
+          <earliest>$time_token.earliest$</earliest>
+          <latest>$time_token.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x65A637","0xF7BC38","0xF58F39","0xD93F3C"]</option>
+        <option name="rangeValues">[0,5,15]</option>
+        <option name="underLabel">Optimize Queries</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Searches by Cron Schedule (Top 20)</title>
+      <chart>
+        <search>
+          <query>| rest /servicesNS/-/-/saved/searches 
+| search disabled=0 is_scheduled=1 eai:acl.app=$app_filter$
+| eval schedule_type=if(realtime_schedule=1, "Real-Time", "Scheduled")
+| eval cron_display=if(schedule_type="Real-Time", "Real-Time (continuous)", cron_schedule)
+| eval cron_minute=if(schedule_type="Scheduled", replace(cron_schedule, "^(\S+)\s+.*", "\1"), "*")
+| eval cron_hour=if(schedule_type="Scheduled", replace(cron_schedule, "^\S+\s+(\S+)\s+.*", "\1"), "*")
+| eval cron_readable=case(
+    schedule_type="Real-Time", "Real-Time",
+    cron_schedule="*/1 * * * *", "Every 1 min",
+    cron_schedule="*/2 * * * *", "Every 2 min",
+    cron_schedule="*/5 * * * *", "Every 5 min",
+    cron_schedule="*/10 * * * *", "Every 10 min",
+    cron_schedule="*/15 * * * *", "Every 15 min",
+    cron_schedule="*/30 * * * *", "Every 30 min",
+    cron_schedule="0 * * * *", "Hourly",
+    cron_schedule="0 */2 * * *", "Every 2 hours",
+    cron_schedule="0 */4 * * *", "Every 4 hours",
+    cron_schedule="0 */6 * * *", "Every 6 hours",
+    cron_schedule="0 */12 * * *", "Every 12 hours",
+    cron_schedule="0 0 * * *", "Daily",
+    match(cron_minute, "^\*/"), replace(cron_minute, "^\*/", "Every ") . " min",
+    match(cron_hour, "^\*/"), replace(cron_hour, "^\*/", "Every ") . " hours",
+    1=1, cron_schedule)
+| eval sort_order=case(
+    schedule_type="Real-Time", 0,
+    cron_schedule="*/1 * * * *", 1,
+    cron_schedule="*/2 * * * *", 2,
+    cron_schedule="*/5 * * * *", 5,
+    cron_schedule="*/10 * * * *", 10,
+    cron_schedule="*/15 * * * *", 15,
+    cron_schedule="*/30 * * * *", 30,
+    cron_schedule="0 * * * *", 60,
+    cron_schedule="0 */2 * * *", 120,
+    cron_schedule="0 */4 * * *", 240,
+    cron_schedule="0 0 * * *", 1440,
+    1=1, 9999)
+| stats count by cron_schedule, cron_readable, sort_order
+| sort sort_order, - count
+| head 20
+| eval display=cron_readable . " (" . cron_schedule . ")"
+| fields display, count
+| rename display as "Schedule", count as "Count"</query>
+          <earliest>$time_token.earliest$</earliest>
+          <latest>$time_token.latest$</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.axisTitleX.text">Cron Schedule</option>
+        <option name="charting.axisTitleY.text">Number of Searches</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">-45</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Searches by Type</title>
+      <chart>
+        <search>
+          <query>| rest /servicesNS/-/-/saved/searches 
+| search disabled=0 is_scheduled=1 eai:acl.app=$app_filter$
+| eval search_type=case(
+    match(actions, ".*email.*") AND (isnotnull('alert.track') OR 'alert_type'!=""), "Alert",
+    match(actions, ".*email.*") OR match(actions, ".*rss.*") OR match(actions, ".*summary_index.*"), "Report",
+    isnotnull('alert.track') OR 'alert_type'!="", "Alert",
+    1=1, "Scheduled Search")
+| stats count by search_type</query>
+          <earliest>$time_token.earliest$</earliest>
+          <latest>$time_token.latest$</latest>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Scheduling Conflicts - Top 20 Most Congested Time Slots</title>
+      <table>
+        <search>
+          <query>| rest /servicesNS/-/-/saved/searches 
+| search disabled=0 is_scheduled=1 eai:acl.app=$app_filter$
+| fields title, cron_schedule, realtime_schedule, eai:acl.app
+| eval schedule_type=if(realtime_schedule=1, "Real-Time", "Scheduled")
+| eval cron_minute=if(schedule_type="Scheduled", replace(cron_schedule, "^(\S+)\s+.*", "\1"), "continuous")
+| eval cron_hour=if(schedule_type="Scheduled", replace(cron_schedule, "^\S+\s+(\S+)\s+.*", "\1"), "continuous")
+| eval app='eai:acl.app'
+| eval minute_pattern=case(
+    cron_minute="*", "Every minute",
+    match(cron_minute, "^\*/"), "Every " . replace(cron_minute, "^\*/", "") . " minutes",
+    match(cron_minute, "^\d+$"), "At minute " . cron_minute,
+    match(cron_minute, ","), "Multiple specific minutes",
+    match(cron_minute, "-"), "Range of minutes",
+    1=1, cron_minute)
+| eval hour_pattern=case(
+    cron_hour="*", "Every hour",
+    match(cron_hour, "^\*/"), "Every " . replace(cron_hour, "^\*/", "") . " hours",
+    match(cron_hour, "^\d+$"), "At hour " . cron_hour,
+    match(cron_hour, ","), "Multiple specific hours",
+    match(cron_hour, "-"), "Range of hours",
+    1=1, cron_hour)
+| eval time_slot=case(
+    cron_hour="0" OR cron_hour="*/24", "Midnight (00:00)",
+    cron_hour="8", "8 AM",
+    cron_hour="12", "Noon",
+    cron_hour="18", "6 PM",
+    schedule_type="Real-Time", "Continuous",
+    match(cron_hour, "^\*/"), "Every " . replace(cron_hour, "^\*/", "") . " hours",
+    1=1, "Various")
+| stats 
+    count as search_count, 
+    dc(app) as app_count,
+    values(app) as apps
+    by cron_schedule, time_slot, minute_pattern, hour_pattern, schedule_type
+| sort - search_count
+| eval conflict_level=case(
+    search_count&gt;=20, "🔴 CRITICAL: " . search_count . " searches",
+    search_count&gt;=10, "🟡 WARNING: " . search_count . " searches",
+    search_count&gt;=5, "🟢 MODERATE: " . search_count . " searches",
+    1=1, "✓ OK")
+| table conflict_level, cron_schedule, time_slot, search_count, minute_pattern, hour_pattern, schedule_type, app_count
+| head 20
+| rename conflict_level as "Conflict Level", cron_schedule as "Cron Schedule", time_slot as "Time Slot", search_count as "# Searches", minute_pattern as "Minute Pattern", hour_pattern as "Hour Pattern", schedule_type as "Type", app_count as "# Apps"</query>
+          <earliest>$time_token.earliest$</earliest>
+          <latest>$time_token.latest$</latest>
+        </search>
+        <option name="drilldown">cell</option>
+        <option name="refresh.display">progressbar</option>
+        <format type="color" field="Conflict Level">
+          <colorPalette type="map">{"🔴 CRITICAL":#D93F3C,"🟡 WARNING":#F7BC38,"🟢 MODERATE":#6DB7C6,"✓ OK":#65A637}</colorPalette>
+        </format>
+        <drilldown>
+          <condition field="# Searches">
+            <link target="_blank">/app/search/search?q=| rest /servicesNS/-/-/saved/searches | search disabled=0 is_scheduled=1 cron_schedule="$row.Cron Schedule$" | table title, eai:acl.app, eai:acl.owner, cron_schedule, next_scheduled_time&amp;earliest=$time_token.earliest$&amp;latest=$time_token.latest$</link>
+          </condition>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Scheduled Searches by App</title>
+      <chart>
+        <search>
+          <query>| rest /servicesNS/-/-/saved/searches 
+| search disabled=0 is_scheduled=1 eai:acl.app=$app_filter$
+| eval app='eai:acl.app'
+| stats count by app
+| sort - count
+| head 15</query>
+          <earliest>$time_token.earliest$</earliest>
+          <latest>$time_token.latest$</latest>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.axisTitleX.text">Number of Searches</option>
+        <option name="charting.axisTitleY.text">App</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Detailed Search Analysis</title>
+      <table>
+        <search>
+          <query>| rest /servicesNS/-/-/saved/searches 
+| search disabled=0 is_scheduled=1 eai:acl.app=$app_filter$
+| fields title, author, cron_schedule, dispatch.earliest_time, dispatch.latest_time, search, is_scheduled, disabled, actions, alert.track, alert_type, realtime_schedule, next_scheduled_time, qualifiedSearch, eai:acl.app, eai:acl.owner, eai:acl.sharing
+| eval search_type=case(
+    match(actions, ".*email.*") OR isnotnull('alert.track'), "Alert",
+    match(title, "(?i)report"), "Report", 
+    1=1, "Scheduled Search")
+| eval schedule_type=case(
+    realtime_schedule=1, "Real-Time",
+    is_scheduled=1, "Scheduled",
+    1=1, "Unknown")
+| eval time_range='dispatch.earliest_time' . " to " . 'dispatch.latest_time'
+| eval cron_readable=case(
+    cron_schedule="*/1 * * * *", "Every 1 minute",
+    cron_schedule="*/2 * * * *", "Every 2 minutes",
+    cron_schedule="*/5 * * * *", "Every 5 minutes",
+    cron_schedule="*/10 * * * *", "Every 10 minutes",
+    cron_schedule="*/15 * * * *", "Every 15 minutes",
+    cron_schedule="*/30 * * * *", "Every 30 minutes",
+    cron_schedule="0 * * * *", "Every hour",
+    cron_schedule="0 */2 * * *", "Every 2 hours",
+    cron_schedule="0 */4 * * *", "Every 4 hours",
+    cron_schedule="0 0 * * *", "Daily at midnight",
+    cron_schedule="0 8 * * *", "Daily at 8 AM",
+    match(cron_schedule, "^\*/"), "Every " . replace(cron_schedule, "^\*/(\d+).*", "\1") . " minutes",
+    1=1, cron_schedule)
+| eval frequency_minutes=case(
+    match(cron_schedule, "^\*/(\d+) \* \* \* \*"), tonumber(replace(cron_schedule, "^\*/(\d+).*", "\1")),
+    match(cron_schedule, "^0 \*/(\d+) \* \* \*"), tonumber(replace(cron_schedule, "^0 \*/(\d+).*", "\1")) * 60,
+    match(cron_schedule, "^0 0 \* \* \*"), 1440,
+    1=1, null())
+| eval optimization_flag=case(
+    schedule_type="Real-Time", "⚠️ CRITICAL: Real-Time",
+    frequency_minutes&lt;=1 AND NOT match(title, "(?i)critical|emergency|urgent"), "⚠️ HIGH: Too frequent",
+    frequency_minutes&lt;=2 AND match(search, "(?i)stats.*count.*by"), "⚠️ MEDIUM: Frequent aggregation",
+    match(search, "(?i)\\|\\s*join"), "⚠️ MEDIUM: Contains JOIN",
+    match(search, "(?i)\\|\\s*append"), "⚠️ LOW: Contains APPEND",
+    match(search, "(?i)transaction"), "⚠️ MEDIUM: Uses transaction",
+    len(search)&gt;1000, "⚠️ LOW: Complex query",
+    isnull(frequency_minutes), "⚠️ LOW: Non-standard cron",
+    1=1, "✓ OK")
+| eval optimization_priority=case(
+    match(optimization_flag, "CRITICAL"), 1,
+    match(optimization_flag, "HIGH"), 2,
+    match(optimization_flag, "MEDIUM"), 3,
+    match(optimization_flag, "LOW"), 4,
+    1=1, 5)
+| search optimization_priority=$priority_filter$
+| eval app='eai:acl.app'
+| eval owner='eai:acl.owner'
+| table title, search_type, schedule_type, cron_readable, frequency_minutes, time_range, app, owner
+| sort optimization_priority, frequency_minutes
+| rename optimization_priority as "Priority", optimization_flag as "Issue", title as "Search Name", search_type as "Type", schedule_type as "Schedule Type", cron_readable as "Frequency", frequency_minutes as "Freq (min)", time_range as "Time Range", app as "App", owner as "Owner"</query>
+          <earliest>$time_token.earliest$</earliest>
+          <latest>$time_token.latest$</latest>
+        </search>
+        <option name="drilldown">row</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">true</option>
+        <format type="color" field="Issue">
+          <colorPalette type="map">{"⚠️ CRITICAL: Real-Time":#D93F3C,"⚠️ HIGH: Too frequent":#F58F39,"⚠️ MEDIUM: Contains JOIN":#F7BC38,"⚠️ MEDIUM: Uses transaction":#F7BC38,"⚠️ MEDIUM: Frequent aggregation":#F7BC38,"⚠️ LOW: Contains APPEND":#6DB7C6,"⚠️ LOW: Complex query":#6DB7C6,"⚠️ LOW: Non-standard cron":#6DB7C6,"✓ OK":#65A637}</colorPalette>
+        </format>
+        <format type="color" field="Priority">
+          <colorPalette type="list">[#D93F3C,#F58F39,#F7BC38,#6DB7C6,#65A637]</colorPalette>
+          <scale type="category"></scale>
+        </format>
+        <drilldown>
+          <link target="_blank">/app/search/search?q=| rest /servicesNS/-/-/saved/searches | search title="$row.Search Name$" | table *</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+</form>
