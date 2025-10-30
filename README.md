@@ -18,7 +18,7 @@ A comprehensive Splunk dashboard for analyzing, optimizing, and managing schedul
 
 This dashboard provides deep visibility into your Splunk scheduled searches, helping you identify performance bottlenecks, scheduling conflicts, and optimization opportunities. It's designed for Splunk administrators and power users who need to maintain optimal search performance across their deployment.
 
-![Dashboard Overview](images/dashboard_overview.jpg)
+![Dashboard Overview](dashboard_overview.jpg)
 
 ## ✨ Features
 
