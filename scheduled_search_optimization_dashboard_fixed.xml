@@ -1,5 +1,5 @@
 <form version="1.1">
-  <label>Scheduled Search Optimization Dashboard v2.2</label>
+  <label>Scheduled Search Optimization Dashboard v2.3</label>
   <description>Comprehensive analysis of scheduled searches, reports, and alerts - Data Only</description>
   <!-- Row 1: Executive Summary -->
   <!-- Row 2: Summary Statistics by Type -->
@@ -36,6 +36,53 @@
       <default>*</default>
     </input>
   </fieldset>
+    <!-- Base searches for the new section -->
+  <search id="sched_base">
+    <query>
+      <![CDATA[
+      | rest "/servicesNS/-/-/admin/savedsearch/" search="is_scheduled=1" search="disabled=0" splunk_server=local 
+          [| makeresults 
+          | eval earliest_time=relative_time(now(), "-0d@d-1m"), latest_time=relative_time(now(), "+1d@d") 
+          | return earliest_time, latest_time ] 
+      | table splunk_server eai:acl.app eai:acl.owner eai:acl.sharing cron_schedule title scheduled_times 
+      | eval cron=split(cron_schedule," "), minutes=mvindex(cron,0), xcron=mvjoin(mvindex(cron,1,4)," "), every=mvindex(split(minutes,"/"),1) , mspan=split(minutes,","),mspan=mvsort(mvmap(mspan,if(len(mspan)=1,"0".mspan,mspan))), every=if(isnull(every) AND isnotnull(mvfind(split(minutes,""),",")),-1,every), at=mvindex(split(mvindex(split(mvindex(split(minutes,"/"),0),"-"),0),","),0), prev=0, x=0 
+      | foreach mode=multivalue mspan 
+          [ eval x=<<ITEM>>-prev, prev=<<ITEM>>, span=mvappend(span,x)] 
+      | eval every=if(mvcount(mvdedup(mvindex(span,1,60)))=1,x,every), at=if(isnotnull(span),mvindex(mspan,0),at) 
+      | eval cron_type=if(isnull(every),60,every)
+      | where (round(60%cron_type)=0 AND cron_type>1) OR round(cron_type%5)=0 
+      | sort cron_type 
+      | streamstats count reset_after="count=cron_type" by cron_type 
+      | eval count=count-1 
+      | eval new_cron=case(cron_type=60,count." ".xcron,cron_type=-1,minutes." ".xcron,cron_type=1,minutes." ".xcron,1=1,count-(floor(count/cron_type)*cron_type)."-59/".cron_type." ".xcron), at=if(at="*",0,at) 
+      | eval ncron=split(new_cron," "), nminutes=mvindex(ncron,0), nxcron=mvjoin(mvindex(ncron,1,4)," "), nat=mvindex(split(mvindex(split(mvindex(split(nminutes,"/"),0),"-"),0),","),0), every=mvindex(split(nminutes,"/"),1), adj=(nat-at)*60, s_t=mvmap(scheduled_times,scheduled_times+adj)
+      | table splunk_server eai:acl.app eai:acl.owner eai:acl.sharing cron_schedule new_cron title scheduled_times s_t
+    ]]>
+    </query>
+    <earliest>-0d@d</earliest>
+    <latest>+1d@d</latest>
+  </search>
+  
+  <search id="today_sched" base="sched_base">
+    <query>| table splunk_server cron_schedule title scheduled_times
+      | mvexpand scheduled_times
+      | rename scheduled_times as _time 
+      | timechart span=1m count values(eval("\"".title."\"")) as searches first(splunk_server) as host 
+      | eventstats avg(count) as acount sum(count) as "Total Searches" max(count) as maxcount
+    </query>
+  </search>
+  
+  <search id="today_resched" base="sched_base">
+    <query>
+      <![CDATA[| table splunk_server new_cron title s_t
+      | mvexpand s_t
+      | eval s_t=if(s_t>=relative_time(now(),"+1d@d"),relative_time(s_t,"-1d"),s_t)
+      | rename s_t as _time 
+      | timechart span=1m count values(eval("\"".title."\"")) as searches first(splunk_server) as host 
+      | eventstats avg(count) as acount sum(count) as "Total Searches"
+      | where _time>=relative_time(now(),"-0d@d") AND _time<=relative_time(now(),"+1d@d")]]>
+    </query>
+  </search>
   <row>
     <panel>
       <title>Total Scheduled Searches</title>
@@ -93,6 +140,36 @@
       </single>
     </panel>
   </row>
+  
+  <!-- NEW SECTION: Scheduled Search Start Times for Today -->
+  <row>
+    <panel>
+      <title>Scheduled Search Start Times for Today</title>
+      <html>
+        <style>
+          #curl_run {width: 1800px !important;}
+        </style>
+      </html>
+      <chart>
+        <search base="today_sched">
+          <query>fields - maxcount, "Total Searches"</query>
+        </search>
+        <option name="charting.axisY2.enabled">1</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.overlayFields">"Total Searches"</option>
+        <option name="charting.drilldown">all</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <eval token="spanstart">relative_time($row._time$,"@h")</eval>
+          <eval token="spanend">relative_time($row._time$,"+1h@h")</eval>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+  
+  
+  
   <row>
     <panel>
       <title>Searches by Cron Schedule (Top 20)</title>
