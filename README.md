@@ -52,7 +52,6 @@ This dashboard provides deep visibility into your Splunk scheduled searches, hel
 ### Prerequisites
 - Splunk Enterprise 8.0+ or Splunk Cloud
 - Administrator or Power User role
-- Access to the REST API endpoint
 
 ### Installation Steps
 
