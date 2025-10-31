@@ -9,7 +9,6 @@ A comprehensive Splunk dashboard for analyzing, optimizing, and managing schedul
 - [Installation](#installation)
 - [Dashboard Sections](#dashboard-sections)
 - [Use Cases](#use-cases)
-- [Optimization Recommendations](#optimization-recommendations)
 - [Version History](#version-history)
 - [Contributing](#contributing)
 - [License](#license)
