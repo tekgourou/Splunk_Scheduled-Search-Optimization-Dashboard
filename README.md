@@ -72,7 +72,7 @@ This dashboard provides deep visibility into your Splunk scheduled searches, hel
 
 4. **Verify Installation**
    - Navigate to the app where you installed the dashboard
-   - Look for "Scheduled Search Optimization Dashboard v2.2"
+   - Look for "Scheduled Search Optimization Dashboard vX.X"
    - Click **Submit** to load all panels
 
 ## 📊 Dashboard Sections
